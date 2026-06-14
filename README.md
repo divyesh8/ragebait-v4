@@ -15,18 +15,73 @@ groups, profiles).
 - `/leaderboard` — global rankings by Aura
 - `/profile` — user profile, stats, achievements, Aura history
 - `/groups` — Rage Groups (communities)
-- `/login`, `/signup` — auth UI (forms only, no backend yet)
+- `/login`, `/signup` — **working auth**, backed by Postgres (Neon) + JWT sessions
 - Shared UI kit: `Button`, `Card`, `AuraBadge`
-- Mock data layer (`src/lib/mockData.ts`) standing in for the real API/DB
+- Mock data layer (`src/lib/mockData.ts`) standing in for battles/leaderboard/groups data
 - Dark, neon-purple / electric-blue / crimson theme via Tailwind tokens
+
+## Setting up authentication (required)
+
+Login and signup need a Postgres database and a JWT secret.
+
+### 1. Create a database
+
+In your Vercel project dashboard:
+
+1. Go to **Storage → Create Database → Postgres** (powered by Neon).
+2. Connect it to your project. Vercel automatically adds a `DATABASE_URL`
+   environment variable to your project — no manual copy/paste needed.
+
+If you're using Neon directly (not via Vercel's integration), copy the
+connection string from the Neon dashboard and add it as `DATABASE_URL` in
+**Vercel → Project Settings → Environment Variables**.
+
+### 2. Run the schema
+
+Run `db/schema.sql` against your database once. Easiest ways:
+
+- **Neon SQL Editor**: open your project in [neon.tech](https://neon.tech),
+  paste the contents of `db/schema.sql`, run it.
+- **psql**: `psql "$DATABASE_URL" -f db/schema.sql`
+
+This creates the `users` table used by signup/login.
+
+### 3. Add a JWT secret
+
+In **Vercel → Project Settings → Environment Variables**, add:
+
+```
+JWT_SECRET=<a long random string>
+```
+
+Generate one with `openssl rand -base64 32`.
+
+### 4. Redeploy
+
+After adding env vars, trigger a new deployment (Vercel → Deployments →
+**Redeploy**, or push a commit) so the functions pick up the new variables.
+
+### How it works
+
+- `POST /api/auth/signup` — validates input (zod), checks for duplicate
+  username/email, hashes the password (bcrypt), creates the user, sets a
+  signed JWT session cookie.
+- `POST /api/auth/login` — looks up user by username or email, verifies
+  password, sets the session cookie. Returns `"Account not found."` or
+  `"Please enter the correct password."` per the spec's error messages.
+- `POST /api/auth/logout` — clears the session cookie.
+- `GET /api/auth/me` — returns the current user from the session cookie, or
+  `null`.
+- Email OTP verification is **not yet implemented** — accounts are created
+  as verified-by-default for now (see comments in `api/auth/login/route.ts`
+  for where to enable the check once OTP exists).
 
 ## Not included yet (per the spec's roadmap)
 
-Auth backend (JWT/bcrypt, OTP email verification), PostgreSQL schema, Redis
-caching, Socket.IO real-time chat, AI Judge + AI Moderation integrations
-(OpenAI), Cloudinary uploads, tournaments, admin dashboard, analytics. These
-are designed as independent modules to be added incrementally — see
-`src/types/index.ts` for the data shapes already modeled.
+Email OTP verification, Redis caching, Socket.IO real-time chat, AI Judge +
+AI Moderation integrations (OpenAI), Cloudinary uploads, tournaments, admin
+dashboard, analytics. These are designed as independent modules to be added
+incrementally — see `src/types/index.ts` for the data shapes already modeled.
 
 ## Getting started locally
 
@@ -65,8 +120,11 @@ to deploy the current static/mock version.
 ## Project structure
 
 ```
+db/
+  schema.sql      # Postgres schema (users table)
 src/
   app/            # Next.js App Router pages
+    api/auth/     # signup, login, logout, me — route handlers
     battles/
     groups/
     leaderboard/
@@ -77,19 +135,23 @@ src/
     page.tsx
     globals.css
   components/
+    auth/         # LoginForm, SignupForm (client components)
     layout/       # Navbar, Footer
     ui/           # Button, Card, AuraBadge
   lib/
-    mockData.ts   # Placeholder data for all features
+    auth.ts       # JWT sign/verify helpers
+    db.ts         # Neon Postgres connection
+    validation.ts # zod schemas for signup/login
+    mockData.ts   # Placeholder data for battles/leaderboard/groups
   types/
     index.ts      # Shared TypeScript interfaces (User, Battle, AI scores, etc.)
 ```
 
 ## Next modules to build (suggested order)
 
-1. Auth (signup/login/OTP) + PostgreSQL + JWT
+1. Email OTP verification for signup
 2. Real-time chat (Socket.IO) + private/group messaging
 3. AI Judge + AI Moderation (OpenAI Moderation API + custom scoring prompt)
-4. Aura economy persistence + Aura history
+4. Aura economy persistence + Aura history (replace mock data)
 5. Tournaments + seasons
 6. Admin dashboard + analytics

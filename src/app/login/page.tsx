@@ -1,6 +1,6 @@
 import Link from "next/link";
-import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import LoginForm from "@/components/auth/LoginForm";
 
 export default function LoginPage() {
   return (
@@ -13,51 +13,7 @@ export default function LoginPage() {
       </p>
 
       <Card className="mt-8">
-        <form className="space-y-4">
-          <div>
-            <label htmlFor="identifier" className="block text-sm font-medium text-white/70">
-              Username or email
-            </label>
-            <input
-              id="identifier"
-              name="identifier"
-              type="text"
-              autoComplete="username"
-              required
-              className="mt-1.5 w-full rounded-xl border border-line bg-surface2 px-4 py-3 text-sm text-white placeholder:text-white/30 focus-visible:border-aura-purple"
-              placeholder="VoidRoaster or you@example.com"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-white/70">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className="mt-1.5 w-full rounded-xl border border-line bg-surface2 px-4 py-3 text-sm text-white placeholder:text-white/30 focus-visible:border-aura-purple"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 text-white/50">
-              <input type="checkbox" className="rounded border-line bg-surface2" />
-              Remember me
-            </label>
-            <Link href="#" className="text-aura-blue hover:underline">
-              Forgot password?
-            </Link>
-          </div>
-
-          <Button type="submit" className="w-full" size="lg">
-            Log in
-          </Button>
-        </form>
+        <LoginForm />
       </Card>
 
       <p className="mt-6 text-center text-sm text-white/50">
