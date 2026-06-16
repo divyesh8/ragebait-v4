@@ -36,3 +36,14 @@ export const loginSchema = z.object({
   identifier: z.string().min(1, "Enter your username or email"),
   password: z.string().min(1, "Enter your password"),
 });
+
+export const profileUpdateSchema = z.object({
+  bio: z.string().max(300, "Bio must be at most 300 characters").optional(),
+  avatar_url: z.string().url("Enter a valid URL").optional().or(z.literal("")),
+});
+
+export const groupSchema = z.object({
+  name: z.string().min(3, "Group name must be at least 3 characters").max(60),
+  description: z.string().max(300).optional(),
+  topic: z.string().min(1).max(60).optional(),
+});

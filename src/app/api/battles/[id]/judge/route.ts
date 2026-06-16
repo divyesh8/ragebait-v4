@@ -336,7 +336,7 @@ function fallbackJudge(input: {
   creatorName: string;
   opponentName: string;
 }): JudgeResult {
-  function scoreMessages(messages: string[]): Record<string, number> {
+  function scoreMessages(messages: string[]): JudgeScore {
     const totalLen = messages.reduce((s, m) => s + m.length, 0);
     const avgLen = totalLen / Math.max(messages.length, 1);
     const words = messages.join(" ").toLowerCase().split(/\s+/);
