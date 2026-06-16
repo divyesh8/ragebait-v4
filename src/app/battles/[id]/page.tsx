@@ -306,7 +306,7 @@ export default function BattleDetailPage() {
 
       {isParticipant && battle.status === "live" && !canPost && myMessageCount >= battle.rounds && (
         <p className="mt-6 text-center text-sm text-white/40">
-          You've posted all {battle.rounds} of your roasts. Waiting for your opponent...
+          You&apos;ve posted all {battle.rounds} of your roasts. Waiting for your opponent...
         </p>
       )}
 

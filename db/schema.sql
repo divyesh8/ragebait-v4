@@ -1,9 +1,10 @@
 -- Run this once against your Neon / Vercel Postgres database
 -- e.g. via the Neon SQL editor, or `psql $DATABASE_URL -f db/schema.sql`
 --
--- If you already ran an earlier version of this file, it's safe to run this
--- whole file again. DDL statements use IF NOT EXISTS and seed data uses
--- ON CONFLICT, so existing data is preserved.
+-- If you already ran the first version of this file (just the `users`
+-- table), it's safe to run this whole file again — every statement uses
+-- IF NOT EXISTS, so existing tables/columns are left alone and only the
+-- new battle-related tables are added.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -86,37 +87,3 @@ CREATE TABLE IF NOT EXISTS battle_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_battle_messages_battle ON battle_messages (battle_id, created_at ASC);
-
--- =========================================================
--- RAGE GROUPS
--- Topic communities with real memberships.
--- =========================================================
-CREATE TABLE IF NOT EXISTS rage_groups (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          VARCHAR(60) UNIQUE NOT NULL,
-  description   TEXT NOT NULL,
-  banner_url    TEXT NOT NULL DEFAULT '',
-  topics        TEXT[] NOT NULL DEFAULT '{}',
-  created_by    UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_rage_groups_created_at ON rage_groups (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_rage_groups_creator ON rage_groups (created_by);
-
-CREATE TABLE IF NOT EXISTS group_members (
-  group_id    UUID NOT NULL REFERENCES rage_groups(id) ON DELETE CASCADE,
-  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role        VARCHAR(20) NOT NULL DEFAULT 'member',
-  joined_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (group_id, user_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members (user_id, joined_at DESC);
-
-INSERT INTO rage_groups (name, description, topics)
-VALUES
-  ('Android vs iPhone HQ', 'The eternal war. Bring your sharpest tech takes and best comebacks.', ARRAY['Android vs iPhone', 'Technology']),
-  ('Anime Debate Arena', 'Power scaling, ship wars, tournament brackets, and filler arc slander.', ARRAY['Anime', 'Internet Culture']),
-  ('Desi College Chaos', 'Hostel vs day scholar, engineering survival stories, and campus roast nights.', ARRAY['College Life', 'Internet Culture'])
-ON CONFLICT (name) DO NOTHING;

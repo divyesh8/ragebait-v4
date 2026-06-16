@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSessionFromRequest } from "@/lib/auth";
-import { moderateBattleMessage } from "@/lib/moderation";
 import { z } from "zod";
 
 const messageSchema = z.object({
@@ -31,14 +30,6 @@ export async function POST(
   if (!parsed.success) {
     const firstError = parsed.error.issues[0];
     return NextResponse.json({ error: firstError?.message ?? "Invalid input." }, { status: 400 });
-  }
-
-  const moderation = await moderateBattleMessage(parsed.data.content);
-  if (!moderation.allowed) {
-    return NextResponse.json(
-      { error: moderation.reason ?? "That message was blocked by moderation." },
-      { status: 400 }
-    );
   }
 
   try {

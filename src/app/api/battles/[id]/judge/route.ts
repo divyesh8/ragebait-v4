@@ -92,7 +92,65 @@ export async function POST(
       .filter((m) => m.user_id === battle.opponent_id)
       .map((m) => m.content as string);
 
-    const judgeResult = await runJudge({
+    if (!process.env.OPENAI_API_KEY) {
+      // No OpenAI key — use a deterministic fallback judge based on
+      // message length, variety, and round-by-round scoring.
+      const judgeResult = fallbackJudge({
+        creatorMessages,
+        opponentMessages,
+        creatorName: battle.creator_username,
+        opponentName: battle.opponent_username,
+      });
+
+      const winnerId =
+        judgeResult.winner === "creator"
+          ? battle.created_by
+          : judgeResult.winner === "opponent"
+          ? battle.opponent_id
+          : null;
+
+      const creatorTotal = judgeResult.scores.creator?.total ?? 0;
+      const opponentTotal = judgeResult.scores.opponent?.total ?? 0;
+      const margin = Math.abs(creatorTotal - opponentTotal);
+
+      await sql`
+        UPDATE battles
+        SET status = 'completed',
+            winner_id = ${winnerId},
+            ai_summary = ${judgeResult.summary},
+            ai_scores = ${JSON.stringify({
+              creator: judgeResult.scores.creator,
+              opponent: judgeResult.scores.opponent,
+              feedback: judgeResult.feedback,
+            })},
+            completed_at = now()
+        WHERE id = ${id}
+      `;
+
+      if (winnerId) {
+        const loserId = winnerId === battle.created_by ? battle.opponent_id : battle.created_by;
+        const winnerIsDominant = margin >= DOMINANT_MARGIN;
+        const winnerAura = winnerIsDominant ? AURA_DOMINANT_WIN : AURA_WIN;
+        await applyAuraChange(winnerId, winnerAura, winnerIsDominant ? "Dominant Win" : "Battle Win", id);
+        await applyAuraChange(loserId, AURA_LOSS, "Battle Loss", id);
+        await sql`UPDATE users SET wins = wins + 1, current_streak = current_streak + 1, best_streak = GREATEST(best_streak, current_streak + 1) WHERE id = ${winnerId}`;
+        await sql`UPDATE users SET losses = losses + 1, current_streak = 0 WHERE id = ${loserId}`;
+      } else {
+        await applyAuraChange(battle.created_by, 5, "Battle Draw", id);
+        await applyAuraChange(battle.opponent_id, 5, "Battle Draw", id);
+      }
+
+      return NextResponse.json({
+        success: true,
+        winnerId,
+        summary: judgeResult.summary,
+        scores: judgeResult.scores,
+        feedback: judgeResult.feedback,
+        note: "Scored by built-in judge (no OpenAI key configured).",
+      });
+    }
+
+    const judgeResult = await runAiJudge({
       topic: battle.topic,
       title: battle.title,
       creatorName: battle.creator_username,
@@ -172,21 +230,6 @@ async function applyAuraChange(userId: string, amount: number, reason: string, b
   `;
 }
 
-async function runJudge(input: {
-  topic: string;
-  title: string;
-  creatorName: string;
-  opponentName: string;
-  creatorMessages: string[];
-  opponentMessages: string[];
-}): Promise<JudgeResult> {
-  if (!process.env.OPENAI_API_KEY) {
-    return runLocalJudge(input);
-  }
-
-  return runAiJudge(input);
-}
-
 async function runAiJudge(input: {
   topic: string;
   title: string;
@@ -239,106 +282,6 @@ async function runAiJudge(input: {
   return parsed;
 }
 
-function runLocalJudge(input: {
-  topic: string;
-  title: string;
-  creatorName: string;
-  opponentName: string;
-  creatorMessages: string[];
-  opponentMessages: string[];
-}): JudgeResult {
-  const creator = scoreLocalTranscript(input.creatorMessages, input.topic);
-  const opponent = scoreLocalTranscript(input.opponentMessages, input.topic);
-  const diff = Math.abs(creator.total - opponent.total);
-  const winner =
-    diff <= 2 ? "draw" : creator.total > opponent.total ? "creator" : "opponent";
-
-  const winnerName =
-    winner === "creator"
-      ? input.creatorName
-      : winner === "opponent"
-      ? input.opponentName
-      : null;
-
-  return {
-    scores: { creator, opponent },
-    winner,
-    summary: winnerName
-      ? `${winnerName} wins by the built-in judge with stronger topic control, punch density, and consistency. Add OPENAI_API_KEY for the full AI Judge verdict.`
-      : "The built-in judge scored this as a draw because both players landed at nearly the same total. Add OPENAI_API_KEY for the full AI Judge verdict.",
-    feedback: {
-      creator: localFeedback(creator),
-      opponent: localFeedback(opponent),
-    },
-  };
-}
-
-function scoreLocalTranscript(messages: string[], topic: string): JudgeScore {
-  const combined = messages.join(" ");
-  const words = tokenize(combined);
-  const uniqueWords = new Set(words);
-  const topicWords = new Set(tokenize(topic).filter((word) => word.length > 2));
-  const topicHits = words.filter((word) => topicWords.has(word)).length;
-  const punctuationHits = (combined.match(/[!?]/g) ?? []).length;
-  const metaphorHits = (combined.match(/\b(like|as if|than|looks like)\b/gi) ?? []).length;
-  const avgWords = words.length / Math.max(messages.length, 1);
-  const uniqueRatio = words.length > 0 ? uniqueWords.size / words.length : 0;
-
-  const humor = clampScore(48 + punctuationHits * 3 + metaphorHits * 7 + Math.min(words.length / 10, 18));
-  const creativity = clampScore(45 + uniqueRatio * 35 + metaphorHits * 5);
-  const originality = clampScore(45 + uniqueRatio * 40);
-  const topicRelevance = clampScore(45 + topicHits * 14);
-  const timing = clampScore(55 + messages.length * 5 + (avgWords >= 8 && avgWords <= 42 ? 15 : 0));
-  const comebackQuality = clampScore(45 + Math.max(messages.length - 1, 0) * 9 + punctuationHits * 2);
-  const confidence = clampScore(52 + punctuationHits * 4 + Math.min(words.length / 12, 18));
-  const wordplay = clampScore(42 + metaphorHits * 10 + uniqueRatio * 25);
-  const consistency = clampScore(60 + messages.length * 6 - (words.length < messages.length * 5 ? 15 : 0));
-  const scores = [
-    humor,
-    creativity,
-    originality,
-    topicRelevance,
-    timing,
-    comebackQuality,
-    confidence,
-    wordplay,
-    consistency,
-  ];
-
-  return {
-    humor,
-    creativity,
-    originality,
-    topicRelevance,
-    timing,
-    comebackQuality,
-    confidence,
-    wordplay,
-    consistency,
-    total: Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length),
-  };
-}
-
-function tokenize(value: string) {
-  return value.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-}
-
-function clampScore(value: number) {
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function localFeedback(score: JudgeScore) {
-  if (score.topicRelevance < 60) {
-    return "Tie more punches directly back to the battle topic for a stronger score.";
-  }
-
-  if (score.wordplay < 60) {
-    return "Add sharper comparisons, reversals, and wordplay to make the roast feel less generic.";
-  }
-
-  return "Strong base. Keep the punchlines tight and build more direct callbacks across rounds.";
-}
-
 function buildJudgePrompt(input: {
   topic: string;
   title: string;
@@ -380,4 +323,64 @@ Respond with this exact JSON shape:
     "opponent": "1-2 sentence improvement tip"
   }
 }`;
+}
+
+/**
+ * Fallback judge used when OPENAI_API_KEY is not set.
+ * Scores based on message length, variety, and unique word count as a
+ * rough proxy for effort and creativity.
+ */
+function fallbackJudge(input: {
+  creatorMessages: string[];
+  opponentMessages: string[];
+  creatorName: string;
+  opponentName: string;
+}): JudgeResult {
+  function scoreMessages(messages: string[]): Record<string, number> {
+    const totalLen = messages.reduce((s, m) => s + m.length, 0);
+    const avgLen = totalLen / Math.max(messages.length, 1);
+    const words = messages.join(" ").toLowerCase().split(/\s+/);
+    const uniqueWords = new Set(words).size;
+    const variety = Math.min(100, Math.round((uniqueWords / Math.max(words.length, 1)) * 150));
+    const length = Math.min(100, Math.round(avgLen / 3));
+
+    // Add mild randomness (±8) so battles aren't always draws
+    const rand = () => Math.floor(Math.random() * 17) - 8;
+
+    const humor        = Math.min(100, Math.max(0, Math.round((length * 0.4 + variety * 0.6)) + rand()));
+    const creativity   = Math.min(100, Math.max(0, Math.round(variety) + rand()));
+    const originality  = Math.min(100, Math.max(0, Math.round(variety * 0.8 + length * 0.2) + rand()));
+    const topicRelevance = Math.min(100, Math.max(0, 65 + rand()));
+    const timing       = Math.min(100, Math.max(0, 60 + rand()));
+    const comebackQuality = Math.min(100, Math.max(0, Math.round(length * 0.5 + variety * 0.5) + rand()));
+    const confidence   = Math.min(100, Math.max(0, Math.round(length * 0.7) + rand()));
+    const wordplay     = Math.min(100, Math.max(0, Math.round(variety * 0.9) + rand()));
+    const consistency  = Math.min(100, Math.max(0, 70 + rand()));
+    const total = Math.round(
+      (humor + creativity + originality + topicRelevance + timing +
+        comebackQuality + confidence + wordplay + consistency) / 9
+    );
+    return { humor, creativity, originality, topicRelevance, timing, comebackQuality, confidence, wordplay, consistency, total };
+  }
+
+  const creatorScores  = scoreMessages(input.creatorMessages);
+  const opponentScores = scoreMessages(input.opponentMessages);
+  const diff = creatorScores.total - opponentScores.total;
+
+  const winner: "creator" | "opponent" | "draw" =
+    Math.abs(diff) <= 2 ? "draw" : diff > 0 ? "creator" : "opponent";
+
+  const winnerName = winner === "creator" ? input.creatorName : winner === "opponent" ? input.opponentName : null;
+
+  const summary =
+    winner === "draw"
+      ? `It was a close battle between ${input.creatorName} and ${input.opponentName}. Both participants showed strong effort and the scores were nearly identical — this one goes down as a draw.`
+      : `${winnerName} edged out the win in this battle with stronger variety and creativity across their roasts. A solid performance that earned the Aura.`;
+
+  const feedback = {
+    creator: "Try to vary your vocabulary more and keep each roast focused on the battle topic for higher scores.",
+    opponent: "Try to vary your vocabulary more and keep each roast focused on the battle topic for higher scores.",
+  };
+
+  return { scores: { creator: creatorScores, opponent: opponentScores }, winner, summary, feedback };
 }
