@@ -8,6 +8,7 @@ export default function LoginForm() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +21,7 @@ export default function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ identifier, password, rememberMe }),
       });
 
       const data = await res.json();
@@ -83,12 +84,14 @@ export default function LoginForm() {
 
       <div className="flex items-center justify-between text-sm">
         <label className="flex items-center gap-2 text-white/50">
-          <input type="checkbox" className="rounded border-line bg-surface2" />
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="rounded border-line bg-surface2"
+          />
           Remember me
         </label>
-        <a href="#" className="text-aura-blue hover:underline">
-          Forgot password?
-        </a>
       </div>
 
       <Button type="submit" className="w-full" size="lg" disabled={loading}>

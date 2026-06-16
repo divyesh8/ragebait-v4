@@ -35,4 +35,39 @@ export const signupSchema = z
 export const loginSchema = z.object({
   identifier: z.string().min(1, "Enter your username or email"),
   password: z.string().min(1, "Enter your password"),
+  rememberMe: z.boolean().optional(),
+});
+
+export const profileUpdateSchema = z.object({
+  bio: z.string().max(280, "Bio must be at most 280 characters").optional().default(""),
+  avatarUrl: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^https?:\/\/.+/i.test(value), "Avatar URL must start with http:// or https://")
+    .optional()
+    .default(""),
+});
+
+export const groupSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(3, "Group name must be at least 3 characters")
+    .max(60, "Group name must be at most 60 characters"),
+  description: z
+    .string()
+    .trim()
+    .min(10, "Description must be at least 10 characters")
+    .max(280, "Description must be at most 280 characters"),
+  topics: z
+    .array(z.string().trim().min(1).max(40))
+    .min(1, "Add at least one topic")
+    .max(5, "Use at most 5 topics")
+    .transform((topics) => Array.from(new Set(topics.map((topic) => topic.trim()).filter(Boolean)))),
+  bannerUrl: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^https?:\/\/.+/i.test(value), "Banner URL must start with http:// or https://")
+    .optional()
+    .default(""),
 });

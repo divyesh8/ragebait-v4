@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { identifier, password } = parsed.data;
+  const { identifier, password, rememberMe } = parsed.data;
 
   try {
     const rows = await sql`
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30,
+      ...(rememberMe ? { maxAge: 60 * 60 * 24 * 30 } : {}),
     });
 
     return res;
