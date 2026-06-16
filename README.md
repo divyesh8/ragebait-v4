@@ -189,3 +189,4 @@ src/
 4. Real-time chat (Socket.IO) + private/group messaging
 5. Tournaments + seasons
 6. Admin dashboard + analytics + achievements
+ 
