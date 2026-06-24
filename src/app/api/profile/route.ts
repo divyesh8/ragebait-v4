@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSessionFromRequest } from "@/lib/auth";
-import { profileUpdateSchema } from "@/lib/validation";
+import { z } from "zod";
+
+const profileUpdateSchema = z.object({
+  bio: z.string().max(300, "Bio must be at most 300 characters.").optional().default(""),
+  display_name: z.string().max(50).optional().default(""),
+  avatar_url: z.string().url().optional().or(z.literal("")).default(""),
+});
 
 export async function PATCH(req: NextRequest) {
   const session = await getSessionFromRequest(req);
@@ -10,11 +16,8 @@ export async function PATCH(req: NextRequest) {
   }
 
   let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-  }
+  try { body = await req.json(); }
+  catch { return NextResponse.json({ error: "Invalid request body." }, { status: 400 }); }
 
   const parsed = profileUpdateSchema.safeParse(body);
   if (!parsed.success) {
@@ -22,12 +25,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: firstError?.message ?? "Invalid input." }, { status: 400 });
   }
 
+  const { bio, display_name, avatar_url } = parsed.data;
+
   try {
     const rows = await sql`
       UPDATE users
-      SET bio = ${parsed.data.bio}, avatar_url = ${parsed.data.avatarUrl}
+      SET
+        bio = ${bio},
+        display_name = NULLIF(${display_name}, ''),
+        avatar_url   = NULLIF(${avatar_url}, ''),
+        updated_at   = now()
       WHERE id = ${session.userId}
-      RETURNING id, username, email, aura, level, xp, wins, losses,
+      RETURNING id, username, email, display_name, aura, level, xp, wins, losses,
                 current_streak, best_streak, bio, avatar_url, created_at
     `;
 

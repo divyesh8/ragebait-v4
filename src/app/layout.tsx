@@ -1,41 +1,62 @@
-import type { Metadata } from "next";
-import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata, Viewport } from "next";
+import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import "./globals.css";
 
-const display = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "700"],
-});
-
-const body = Inter({
+const inter = Inter({
   subsets: ["latin"],
   variable: "--font-body",
-  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
-const mono = JetBrains_Mono({
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
-  weight: ["400", "500"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Ragebait — Win the roast. Claim the Aura.",
+  title: {
+    default: "Ragebait — AI-Judged Roast Battles",
+    template: "%s — Ragebait",
+  },
   description:
-    "Ragebait is an AI-powered competitive roast battle platform. Compete in roast battles and debates, earn Aura, and climb the leaderboards.",
+    "Ragebait is the AI-powered arena for roast battles, debates, and meme wars. Win battles. Earn Aura. Zero pay-to-win.",
+  keywords: ["roast battle", "AI judge", "aura", "meme war", "debate", "competitive", "social"],
+  openGraph: {
+    title: "Ragebait — Win the roast. Claim the Aura.",
+    description: "AI-judged competitive social platform for Gen-Z.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ragebait",
+    description: "AI-judged roast battles. Earn Aura through skill.",
+  },
+  robots: { index: true, follow: true },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#05030A",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
-      <body className="font-body bg-void min-h-screen flex flex-col">
+    <html
+      lang="en"
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="flex min-h-screen flex-col bg-void text-white antialiased">
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />

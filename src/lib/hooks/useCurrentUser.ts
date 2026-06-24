@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export interface CurrentUser {
   id: string;
   username: string;
+  display_name: string | null;
   email: string;
   aura: number;
   level: number;
@@ -14,33 +15,44 @@ export interface CurrentUser {
   current_streak: number;
   best_streak: number;
   bio: string;
-  avatar_url: string;
+  avatar_url: string | null;
+  banner_url: string | null;
+  is_admin: boolean;
   created_at: string;
 }
 
+let cachedUser: CurrentUser | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 30_000; // 30 seconds
+
 export function useCurrentUser() {
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<CurrentUser | null>(cachedUser);
+  const [loading, setLoading] = useState(cachedUser === null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    fetch("/api/auth/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!cancelled) setUser(data.user ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setUser(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      const data = await res.json();
+      const u = data.user ?? null;
+      cachedUser = u;
+      cacheTimestamp = Date.now();
+      setUser(u);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { user, loading };
+  useEffect(() => {
+    // Use cache if fresh enough
+    if (cachedUser !== null && Date.now() - cacheTimestamp < CACHE_TTL) {
+      setUser(cachedUser);
+      setLoading(false);
+      return;
+    }
+    refresh();
+  }, [refresh]);
+
+  return { user, loading, refresh };
 }
